@@ -11,6 +11,10 @@ DATABASE_URL = os.environ.get('DATABASE_URL')
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
+@app.route('/ping', methods=['GET'])
+def health():
+    return "Server is live!", 200
+
 @app.route('/assign_label', methods=['POST'])
 def assign_label():
     # Qualtrics sends data via JSON or Form-Data
