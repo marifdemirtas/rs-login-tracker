@@ -2,8 +2,11 @@ import os
 import psycopg2
 from flask import Flask, request, jsonify
 from psycopg2.extras import RealDictCursor
+import logging
 
 app = Flask(__name__)
+logging.basicConfig(level=logging.INFO, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Render provides the DATABASE_URL environment variable automatically
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -20,6 +23,8 @@ def assign_label():
     data = request.json or request.form
     netid = data.get('netid', 'Unknown')
     consent = data.get('consent', '')
+
+    app.logger.info(f"Incoming request -> NetID: {netid} | Consent: {consent}")
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -68,14 +73,16 @@ def assign_label():
                     "status": "success_no_consent"
                 }
             else:
+                app.logger.warning(f"WARNING: Ran out of 'No' labels for NetID: {netid}")
                 response_data["status"] = "no_no_labels_available"
         else:
+            app.logger.warning(f"WARNING: Unrecognized consent value '{consent}' for NetID: {netid}")
             response_data["status"] = "unrecognized_consent_value"
 
         conn.commit()
     except Exception as e:
         conn.rollback()
-        print(f"Database Error: {e}")
+        app.logger.error(f"DATABASE ERROR for NetID {netid}: {str(e)}")
     finally:
         cur.close()
         conn.close()
