@@ -17,7 +17,6 @@ def health():
 
 @app.route('/assign_label', methods=['POST'])
 def assign_label():
-    # Qualtrics sends data via JSON or Form-Data
     data = request.json or request.form
     netid = data.get('netid', 'Unknown')
     consent = data.get('consent', '')
@@ -25,7 +24,7 @@ def assign_label():
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Defaults
+    # Default response if something goes wrong or no credentials exist
     response_data = {
         "username": "N/A",
         "password": "N/A",
@@ -33,15 +32,13 @@ def assign_label():
     }
 
     try:
-        # If user consented (e.g., choice contains "Yes")
         if "Yes" in consent:
-            # Atomic update: find the first unused row, lock it, and update it in one go.
-            # This is 100% thread-safe for 50+ simultaneous users.
+            # Secure, concurrent assignment from yes_labels
             cur.execute("""
-                UPDATE credentials 
+                UPDATE yes_labels 
                 SET used = TRUE, netid = %s 
                 WHERE id = (
-                    SELECT id FROM credentials 
+                    SELECT id FROM yes_labels 
                     WHERE used = FALSE 
                     ORDER BY id ASC 
                     LIMIT 1 
@@ -58,9 +55,22 @@ def assign_label():
                     "status": "success"
                 }
             else:
-                response_data["status"] = "no_more_labels"
+                response_data["status"] = "no_yes_labels_available"
+                
+        elif "No" in consent:
+            # Random assignment from no_labels (no locking, no recording netid)
+            cur.execute("SELECT username, password FROM no_labels ORDER BY RANDOM() LIMIT 1;")
+            row = cur.fetchone()
+            if row:
+                response_data = {
+                    "username": row['username'],
+                    "password": row['password'],
+                    "status": "success_no_consent"
+                }
+            else:
+                response_data["status"] = "no_no_labels_available"
         else:
-            response_data["status"] = "no_consent"
+            response_data["status"] = "unrecognized_consent_value"
 
         conn.commit()
     except Exception as e:
@@ -70,7 +80,6 @@ def assign_label():
         cur.close()
         conn.close()
 
-    # Qualtrics will read this JSON
     return jsonify(response_data)
 
 if __name__ == '__main__':
