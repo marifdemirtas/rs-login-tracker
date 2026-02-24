@@ -64,7 +64,21 @@ def assign_label():
                 
         elif "No" in consent:
             # Random assignment from no_labels (no locking, no recording netid)
-            cur.execute("SELECT username, password FROM no_labels ORDER BY RANDOM() LIMIT 1;")
+            # cur.execute("SELECT username, password FROM no_labels ORDER BY RANDOM() LIMIT 1;")
+
+            cur.execute("""
+                UPDATE no_labels 
+                SET used = TRUE
+                WHERE id = (
+                    SELECT id FROM no_labels 
+                    WHERE used = FALSE 
+                    ORDER BY id ASC 
+                    LIMIT 1 
+                    FOR UPDATE SKIP LOCKED
+                )
+                RETURNING username, password;
+            """)
+
             row = cur.fetchone()
             if row:
                 response_data = {
